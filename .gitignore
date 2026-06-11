@@ -1,0 +1,88 @@
+# =============================================================================
+# .gitignore — Padrão para projetos vibecode
+# =============================================================================
+
+# --- Segredos ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+.vault/
+
+# --- Dependencies ---
+node_modules/
+.pnp/
+.pnp.js
+__pycache__/
+*.pyc
+.venv/
+venv/
+.uv/
+
+# --- Build outputs ---
+.next/
+out/
+dist/
+build/
+.output/
+.turbo/
+*.tsbuildinfo
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Testing ---
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+playwright/.cache/
+
+# --- Bancada de trabalho (descartável) ---
+.tmp/
+tmp/
+scratch/
+*.local.*
+
+# --- Cache ---
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# --- Sentry ---
+.sentryclirc
+
+# --- Vercel ---
+.vercel
+
+# --- Mobile (Expo) ---
+.expo/
+expo-env.d.ts
+ios/Pods/
+android/build/
+android/app/build/
+android/.gradle/
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+*.orig.*
+
+# --- Misc ---
+.DS_Store
+*.local
