@@ -1,4 +1,4 @@
-# DESIGN.md — Tokens (use APENAS estes)
+# Design — tokens visuais
 
 ## Paleta (baiana, acolhedora)
 | Token | Hex | Uso |

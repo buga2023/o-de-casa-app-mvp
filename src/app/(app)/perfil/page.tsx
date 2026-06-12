@@ -12,40 +12,35 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
-import { useCurrentUser, useStore } from "@/lib/hooks";
-import { logout, loginDemo, getProfile } from "@/lib/api";
-import { resetDB } from "@/lib/store";
-import { DEMO_ANA, DEMO_BRUNO, DEMO_CARLA } from "@/lib/seed";
-
-const DEMOS = [DEMO_ANA, DEMO_BRUNO, DEMO_CARLA];
+import { useCurrentUser, useData } from "@/lib/hooks";
+import { data } from "@/lib/data";
+import { DEMO_ANA } from "@/lib/seed";
 
 export default function PerfilPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { user } = useCurrentUser();
 
-  // usado só para forçar re-render ao trocar de usuário
-  useStore(() => user?.id);
+  const { data: demos = [] } = useData(() => data.getDemoProfiles(), []);
 
   if (!user) return null;
 
-  const ehDemo = DEMOS.includes(user.id);
+  const ehDemo = demos.some((d) => d.profile.id === user.id);
 
-  function sair() {
-    logout();
+  async function sair() {
+    await data.logout();
     router.replace("/");
   }
 
-  function trocarDemo(id: string) {
-    loginDemo(id);
-    const p = getProfile(id);
-    toast(`Agora você é ${p?.nome ?? "demo"}.`);
+  async function trocarDemo(slug: string, nome: string) {
+    await data.loginDemo(slug);
+    toast(`Agora você é ${nome}.`);
     router.replace("/inicio");
   }
 
-  function resetar() {
-    resetDB();
-    loginDemo(DEMO_ANA);
+  async function resetar() {
+    await data.resetDemo();
+    await data.loginDemo(DEMO_ANA);
     toast("Dados demo reiniciados.");
     router.replace("/inicio");
   }
@@ -73,6 +68,9 @@ export default function PerfilPage() {
                 <Badge variant="dourado">
                   <Star className="h-3.5 w-3.5 fill-current" /> {user.reputacao}
                 </Badge>
+                {user.bloqueado && (
+                  <Badge variant="terracota">bloqueado</Badge>
+                )}
               </div>
             </div>
           </div>
@@ -96,17 +94,16 @@ export default function PerfilPage() {
             (registrar e receber).
           </p>
           <div className="grid grid-cols-3 gap-2">
-            {DEMOS.map((id) => {
-              const p = getProfile(id);
-              const atual = id === user.id;
+            {demos.map(({ slug, profile }) => {
+              const atual = profile.id === user.id;
               return (
                 <Button
-                  key={id}
+                  key={slug}
                   variant={atual ? "primary" : "outline"}
                   size="sm"
-                  onClick={() => !atual && trocarDemo(id)}
+                  onClick={() => !atual && trocarDemo(slug, profile.nome)}
                 >
-                  {p?.nome.split(" ")[0]}
+                  {profile.nome.split(" ")[0]}
                 </Button>
               );
             })}
@@ -115,7 +112,7 @@ export default function PerfilPage() {
       )}
 
       <div className="space-y-2 pt-2">
-        {ehDemo && (
+        {ehDemo && data.driver === "local" && (
           <Button variant="outline" className="w-full" onClick={resetar}>
             <RefreshCw className="h-4 w-4" /> Reiniciar dados demo
           </Button>

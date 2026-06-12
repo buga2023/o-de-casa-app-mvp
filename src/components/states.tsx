@@ -35,11 +35,16 @@ export function Skeleton({ className }: { className?: string }) {
   );
 }
 
-export function StatusBadge({ status }: { status: EncomendaStatus }) {
+export function StatusBadge({
+  status,
+}: {
+  status: EncomendaStatus | "encerrada"; // BR-07: estado derivado, não persiste
+}) {
   const map = {
     registrada: { label: "Registrada", variant: "dourado" as const },
     retirada: { label: "Retirada", variant: "verde" as const },
     contestada: { label: "Contestada", variant: "terracota" as const },
+    encerrada: { label: "Encerrada", variant: "neutral" as const },
   };
   const s = map[status];
   return <Badge variant={s.variant}>{s.label}</Badge>;

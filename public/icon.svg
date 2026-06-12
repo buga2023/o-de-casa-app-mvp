@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#C4633F"/>
+  <!-- casa -->
+  <path d="M256 96 96 232h48v168a16 16 0 0 0 16 16h96V304h0v112h96a16 16 0 0 0 16-16V232h48L256 96z" fill="#FAF4E8"/>
+  <!-- caixa de encomenda -->
+  <rect x="208" y="288" width="96" height="96" rx="8" fill="#C4633F"/>
+  <path d="M208 312h96M256 288v96" stroke="#FAF4E8" stroke-width="10"/>
+</svg>

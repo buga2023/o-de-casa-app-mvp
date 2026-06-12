@@ -72,9 +72,13 @@ export function setSessionUserId(id: string | null) {
   listeners.forEach((l) => l());
 }
 
-// id simples e ordenável o suficiente para o MVP (sem Math.random no SSR)
+// id único garantido via crypto.randomUUID (browser e Node ≥19);
+// fallback com contador só para ambientes sem crypto.
 let counter = 0;
 export function newId(prefix = "id"): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${prefix}_${crypto.randomUUID()}`;
+  }
   counter += 1;
   const t = isBrowser() ? Date.now() : 0;
   return `${prefix}_${t.toString(36)}_${counter.toString(36)}`;

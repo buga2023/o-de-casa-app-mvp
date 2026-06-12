@@ -1,4 +1,4 @@
-# SCREENS.md — 8 telas (com critérios de aceite)
+# Telas — especificação e critérios de aceite
 
 Para cada tela: componentes principais · regras · **aceite** (o que precisa funcionar).
 

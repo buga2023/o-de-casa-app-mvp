@@ -14,10 +14,22 @@ import type {
   Vinculo,
   Encomenda,
   Notificacao,
+  EventoTimeline,
 } from "./types";
-import { MAX_VIZINHOS_PLANO_GRATIS, CONTESTACAO_PRAZO_MS } from "./types";
+import {
+  MAX_VIZINHOS_PLANO_GRATIS,
+  CONTESTACAO_PRAZO_MS,
+  ENCERRAMENTO_PRAZO_MS,
+  REPUTACAO_BLOQUEIO,
+  LIMITE_CONVITES_POR_HORA,
+  LIMITE_REGISTROS_POR_HORA,
+} from "./types";
+import { RegraError } from "./errors";
+import { now, nowIso } from "./datetime";
+import { montarTimeline } from "./timeline";
+import { gerarCodigoAleatorio } from "./codigo";
 
-export class RegraError extends Error {}
+export { RegraError, tryRegra, type Result } from "./errors";
 
 // ---------------- AUTH / PERFIL (RF-01) ----------------
 
@@ -80,16 +92,21 @@ export function getProfile(id: string): Profile | null {
   return loadDB().profiles.find((p) => p.id === id) ?? null;
 }
 
+export const SEARCH_LIMIT = 20;
+
+// Busca exige termo (vazio não lista a base toda) e é limitada a SEARCH_LIMIT.
 export function searchProfiles(query: string, excludeId?: string): Profile[] {
   const q = query.trim().toLowerCase();
-  return loadDB().profiles.filter((p) => {
-    if (p.id === excludeId) return false;
-    if (!q) return true;
-    return (
-      p.nome.toLowerCase().includes(q) ||
-      (p.telefone ?? "").toLowerCase().includes(q)
-    );
-  });
+  if (!q) return [];
+  return loadDB()
+    .profiles.filter((p) => {
+      if (p.id === excludeId) return false;
+      return (
+        p.nome.toLowerCase().includes(q) ||
+        (p.telefone ?? "").toLowerCase().includes(q)
+      );
+    })
+    .slice(0, SEARCH_LIMIT);
 }
 
 // ---------------- VÍNCULOS (RF-02, RF-03 · BR-01/02/05/09) ----------------
@@ -142,6 +159,14 @@ export function convidarVizinho(moradorId: string, vizinhoId: string): Vinculo {
   if (countVizinhosAtivos(moradorId) >= MAX_VIZINHOS_PLANO_GRATIS)
     throw new RegraError(
       `Plano grátis permite até ${MAX_VIZINHOS_PLANO_GRATIS} vizinhos ativos (BR-05).`
+    );
+  // anti-abuso: limite de convites por hora
+  if (
+    contarUltimaHora(db.vinculos, (v) => v.morador_id === moradorId) >=
+    LIMITE_CONVITES_POR_HORA
+  )
+    throw new RegraError(
+      `Limite de ${LIMITE_CONVITES_POR_HORA} convites por hora atingido. Tente mais tarde.`
     );
 
   const existente = db.vinculos.find(
@@ -233,6 +258,15 @@ export function registrarEncomenda(input: RegistrarInput): Encomenda {
   if (!vinculo)
     throw new RegraError("Este destinatário não autorizou você a receber.");
 
+  // anti-abuso: limite de registros por hora
+  if (
+    contarUltimaHora(db.encomendas, (e) => e.recebedor_id === input.recebedorId) >=
+    LIMITE_REGISTROS_POR_HORA
+  )
+    throw new RegraError(
+      `Limite de ${LIMITE_REGISTROS_POR_HORA} registros por hora atingido. Tente mais tarde.`
+    );
+
   const encomenda: Encomenda = {
     id: newId("enc"),
     destinatario_id: input.destinatarioId,
@@ -261,7 +295,7 @@ export function registrarEncomenda(input: RegistrarInput): Encomenda {
   return encomenda;
 }
 
-export function listEncomendasARceber(userId: string): Encomenda[] {
+export function listEncomendasAReceber(userId: string): Encomenda[] {
   return loadDB()
     .encomendas.filter((e) => e.destinatario_id === userId)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -315,6 +349,13 @@ export function darBaixa(encomendaId: string, userId: string): Encomenda {
   return e;
 }
 
+// BR-07: encerrada automaticamente 7 dias após a retirada, sem contestação.
+// Estado derivado na leitura (contestada não tem status "retirada").
+export function estaEncerrada(e: Encomenda): boolean {
+  if (e.status !== "retirada" || !e.retirada_at) return false;
+  return now() - new Date(e.retirada_at).getTime() > ENCERRAMENTO_PRAZO_MS;
+}
+
 // ---------------- NOTIFICAÇÕES (RF-05 · BR-04) ----------------
 
 export function listNotificacoes(userId: string): Notificacao[] {
@@ -347,7 +388,7 @@ export function marcarTodasLidas(userId: string) {
 
 export function podeContestar(e: Encomenda): boolean {
   const registrada = new Date(e.created_at).getTime();
-  return Date.now() - registrada <= CONTESTACAO_PRAZO_MS; // BR-06: 48h
+  return now() - registrada <= CONTESTACAO_PRAZO_MS; // BR-06: 48h
 }
 
 export function avaliar(input: {
@@ -360,6 +401,11 @@ export function avaliar(input: {
   const db = loadDB();
   if (input.nota < 1 || input.nota > 5)
     throw new RegraError("Nota deve ser de 1 a 5.");
+  const repetida = db.avaliacoes.some(
+    (a) => a.encomenda_id === input.encomendaId && a.de_id === input.deId
+  );
+  if (repetida)
+    throw new RegraError("Você já avaliou esta encomenda.");
   db.avaliacoes.push({
     id: newId("avl"),
     encomenda_id: input.encomendaId,
@@ -369,7 +415,24 @@ export function avaliar(input: {
     comentario: input.comentario.trim() || null,
     created_at: nowIso(),
   });
+
+  // Reputação real: média das avaliações recebidas; abaixo do limite bloqueia (BR-09).
+  const avaliado = db.profiles.find((p) => p.id === input.paraId);
+  if (avaliado) {
+    const recebidas = db.avaliacoes.filter((a) => a.para_id === input.paraId);
+    const media =
+      recebidas.reduce((soma, a) => soma + a.nota, 0) / recebidas.length;
+    avaliado.reputacao = Math.round(media * 10) / 10;
+    if (avaliado.reputacao < REPUTACAO_BLOQUEIO) avaliado.bloqueado = true;
+  }
   saveDB(db);
+}
+
+// Já avaliei esta encomenda? (controla exibição do formulário na tela 8)
+export function jaAvaliou(encomendaId: string, deId: string): boolean {
+  return loadDB().avaliacoes.some(
+    (a) => a.encomenda_id === encomendaId && a.de_id === deId
+  );
 }
 
 export function abrirContestacao(input: { encomendaId: string; motivo: string }) {
@@ -391,26 +454,38 @@ export function abrirContestacao(input: { encomendaId: string; motivo: string })
   saveDB(db);
 }
 
-// ---------------- STORAGE (foto) ----------------
+// ---------------- TIMELINE (comprovante rastreável) ----------------
 
-// Converte arquivo em data URL (substitui upload no bucket 'encomendas').
-export function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Falha ao ler a foto."));
-    reader.readAsDataURL(file);
+// Linha do tempo derivada dos dados existentes — não há tabela de eventos.
+export function getTimeline(encomendaId: string): EventoTimeline[] {
+  const db = loadDB();
+  const e = db.encomendas.find((x) => x.id === encomendaId);
+  if (!e) return [];
+  return montarTimeline({
+    encomenda: e,
+    notificacoes: db.notificacoes,
+    avaliacoes: db.avaliacoes,
+    contestacoes: db.contestacoes,
+    nomePorId: (id) => db.profiles.find((p) => p.id === id)?.nome,
   });
 }
 
 // ---------------- helpers ----------------
 
-function nowIso(): string {
-  return new Date().toISOString();
+function gerarCodigo(): string {
+  const encomendas = loadDB().encomendas;
+  for (;;) {
+    const codigo = gerarCodigoAleatorio();
+    if (!encomendas.some((e) => e.codigo_comprovante === codigo)) return codigo;
+  }
 }
 
-function gerarCodigo(): string {
-  const n = loadDB().encomendas.length + 1;
-  const base = (Date.now() % 1_000_000).toString(36).toUpperCase();
-  return `ODC-${base}-${String(n).padStart(3, "0")}`;
+function contarUltimaHora<T extends { created_at: string }>(
+  itens: T[],
+  filtro: (item: T) => boolean
+): number {
+  const corte = now() - 60 * 60 * 1000;
+  return itens.filter(
+    (i) => filtro(i) && new Date(i.created_at).getTime() > corte
+  ).length;
 }

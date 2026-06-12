@@ -4,28 +4,36 @@ import { useState } from "react";
 import Link from "next/link";
 import { Search, Inbox, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
-import { EmptyState, StatusBadge } from "@/components/states";
+import { EmptyState } from "@/components/states";
+import { EncomendaCard } from "@/components/encomenda-card";
 import { Button } from "@/components/ui/button";
-import { useCurrentUser, useStore } from "@/lib/hooks";
-import {
-  listEncomendasARceber,
-  listEncomendasRegistradas,
-  getProfile,
-} from "@/lib/api";
-import type { Encomenda } from "@/lib/types";
-import { formatDateTime } from "@/lib/utils";
+import { useCurrentUser, useData } from "@/lib/hooks";
+import { data } from "@/lib/data";
 
 export default function InicioPage() {
   const { user } = useCurrentUser();
   const [tab, setTab] = useState<"receber" | "registradas">("receber");
   const [q, setQ] = useState("");
 
-  const aReceber = useStore(() =>
-    user ? listEncomendasARceber(user.id) : []
+  const { data: aReceber = [] } = useData(
+    () => (user ? data.listEncomendasAReceber(user.id) : Promise.resolve([])),
+    [user?.id]
   );
-  const registradas = useStore(() =>
-    user ? listEncomendasRegistradas(user.id) : []
+  const { data: registradas = [] } = useData(
+    () => (user ? data.listEncomendasRegistradas(user.id) : Promise.resolve([])),
+    [user?.id]
+  );
+
+  // nomes das contrapartes (recebedor/destinatário) das duas listas
+  const idsContrapartes = Array.from(
+    new Set([
+      ...aReceber.map((e) => e.recebedor_id),
+      ...registradas.map((e) => e.destinatario_id),
+    ])
+  );
+  const { data: nomes = {} } = useData(
+    () => data.getProfilesMap(idsContrapartes),
+    [idsContrapartes.join(",")]
   );
 
   if (!user) return null;
@@ -34,15 +42,16 @@ export default function InicioPage() {
   const filtrada = lista.filter((e) => {
     if (!q.trim()) return true;
     const term = q.toLowerCase();
-    const outro = getProfile(
-      tab === "receber" ? e.recebedor_id : e.destinatario_id
-    );
+    const outroId = tab === "receber" ? e.recebedor_id : e.destinatario_id;
+    const outro = nomes[outroId];
     return (
       (e.descricao ?? "").toLowerCase().includes(term) ||
       e.codigo_comprovante.toLowerCase().includes(term) ||
       (outro?.nome ?? "").toLowerCase().includes(term)
     );
   });
+
+  const buscaSemResultado = filtrada.length === 0 && q.trim() && lista.length > 0;
 
   return (
     <div className="space-y-4">
@@ -77,7 +86,13 @@ export default function InicioPage() {
       </div>
 
       {filtrada.length === 0 ? (
-        tab === "receber" ? (
+        buscaSemResultado ? (
+          <EmptyState
+            icon={<Search className="h-10 w-10" strokeWidth={1.5} />}
+            title="Nada encontrado"
+            description={`Nenhuma encomenda combina com “${q.trim()}”. Tente outro código, nome ou descrição.`}
+          />
+        ) : tab === "receber" ? (
           <EmptyState
             icon={<Inbox className="h-10 w-10" strokeWidth={1.5} />}
             title="Nada a receber por aqui"
@@ -97,9 +112,19 @@ export default function InicioPage() {
         )
       ) : (
         <ul className="space-y-3">
-          {filtrada.map((e) => (
-            <EncomendaItem key={e.id} encomenda={e} perspectiva={tab} />
-          ))}
+          {filtrada.map((e) => {
+            const outroId =
+              tab === "receber" ? e.recebedor_id : e.destinatario_id;
+            return (
+              <li key={e.id}>
+                <EncomendaCard
+                  encomenda={e}
+                  rotulo={tab === "receber" ? "Recebida por" : "Para"}
+                  nomeContraparte={nomes[outroId]?.nome ?? "—"}
+                />
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -118,57 +143,12 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
+      aria-pressed={active}
+      className={`min-h-11 flex-1 rounded-lg py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracota/60 ${
         active ? "bg-white text-tinta shadow-soft" : "text-tinta/50"
       }`}
     >
       {children}
     </button>
-  );
-}
-
-function EncomendaItem({
-  encomenda,
-  perspectiva,
-}: {
-  encomenda: Encomenda;
-  perspectiva: "receber" | "registradas";
-}) {
-  const outroId =
-    perspectiva === "receber"
-      ? encomenda.recebedor_id
-      : encomenda.destinatario_id;
-  const outro = getProfile(outroId);
-  const rotulo = perspectiva === "receber" ? "Recebida por" : "Para";
-
-  return (
-    <li>
-      <Link href={`/comprovante/${encomenda.id}`}>
-        <Card className="flex items-center gap-3 p-3 transition-colors hover:bg-tinta/[0.02]">
-          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-tinta/5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={encomenda.foto_url}
-              alt="Foto da encomenda"
-              className="h-full w-full object-cover"
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-2">
-              <p className="truncate font-medium text-tinta">
-                {encomenda.descricao || "Encomenda"}
-              </p>
-              <StatusBadge status={encomenda.status} />
-            </div>
-            <p className="truncate text-xs text-tinta/60">
-              {rotulo} {outro?.nome ?? "—"} · {encomenda.codigo_comprovante}
-            </p>
-            <p className="text-xs text-tinta/40">
-              {formatDateTime(encomenda.created_at)}
-            </p>
-          </div>
-        </Card>
-      </Link>
-    </li>
   );
 }
