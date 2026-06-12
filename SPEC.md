@@ -1,4 +1,4 @@
-# SPEC.md — Ô de Casa! (o quê e por quê)
+# Ô de Casa! — Especificação
 
 ## Visão
 App mobile-first onde um **morador** autoriza **vizinhos de confiança** a receber suas
@@ -34,8 +34,8 @@ Avaliação/contestação (telas 8) são desejáveis, não bloqueantes.
 - BR-02 vínculo ativo só após aceite explícito
 - BR-03 registro exige no mínimo 1 foto (bloqueante)
 - BR-04 notificação imediata após o registro
-- BR-05 plano grátis: até 2 vizinhos recebedores
+- BR-05 plano grátis: até 2 vizinhos recebedores; Premium: até 5 (fora do escopo do MVP)
 - BR-06 contestação até 48h após o registro
-- BR-07 entrega encerra ao dar baixa (retirada)
+- BR-07 entrega encerrada automaticamente 7 dias após a retirada, sem contestação
 - BR-08 fotos de comprovação não são apagadas
 - BR-09 só vizinhos com reputação ativa (não bloqueados) recebem

@@ -19,6 +19,7 @@ import type {
 import {
   MAX_VIZINHOS_PLANO_GRATIS,
   CONTESTACAO_PRAZO_MS,
+  ENCERRAMENTO_PRAZO_MS,
   REPUTACAO_BLOQUEIO,
   LIMITE_CONVITES_POR_HORA,
   LIMITE_REGISTROS_POR_HORA,
@@ -346,6 +347,13 @@ export function darBaixa(encomendaId: string, userId: string): Encomenda {
 
   saveDB(db);
   return e;
+}
+
+// BR-07: encerrada automaticamente 7 dias após a retirada, sem contestação.
+// Estado derivado na leitura (contestada não tem status "retirada").
+export function estaEncerrada(e: Encomenda): boolean {
+  if (e.status !== "retirada" || !e.retirada_at) return false;
+  return now() - new Date(e.retirada_at).getTime() > ENCERRAMENTO_PRAZO_MS;
 }
 
 // ---------------- NOTIFICAÇÕES (RF-05 · BR-04) ----------------

@@ -1,5 +1,5 @@
 /**
- * tests/sad-paths.spec.ts — Caminhos-tristes (P1.6):
+ * tests/sad-paths.spec.ts — Caminhos-tristes:
  * convite recusado, limite BR-05, contestação dentro/fora do prazo,
  * busca sem resultado e cadastro inválido.
  * Rodar: npm run test:smoke

@@ -121,8 +121,16 @@ create policy "aval_insert_self"    on public.avaliacoes for insert with check (
 create policy "contest_select_auth" on public.contestacoes for select using (auth.uid() is not null);
 create policy "contest_insert_auth" on public.contestacoes for insert with check (auth.uid() is not null);
 
--- Realtime para notificações (RF-05)
-alter publication supabase_realtime add table public.notificacoes;
+-- Realtime (RF-05): notificações + listas que a UI observa
+do $$ begin
+  alter publication supabase_realtime add table public.notificacoes;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.encomendas;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.vinculos;
+exception when duplicate_object then null; end $$;
 
 -- ---------- INTEGRIDADE EXTRA ----------
 -- Uma avaliação por (encomenda, avaliador)

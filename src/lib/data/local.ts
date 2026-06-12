@@ -6,13 +6,20 @@ import type { DataAPI } from "./contract";
 import * as api from "../api";
 import { subscribe, resetDB } from "../store";
 import { comprimirFoto, blobToDataUrl } from "../image";
+import { DEMO_ANA, DEMO_BRUNO, DEMO_CARLA } from "../seed";
 
 export const localDriver: DataAPI = {
   driver: "local",
   supportsDemo: true,
 
   getCurrentUser: async () => api.getCurrentUser(),
-  loginDemo: async (userId) => api.loginDemo(userId),
+  // no driver local o slug demo É o id do perfil
+  loginDemo: async (slug) => api.loginDemo(slug),
+  getDemoProfiles: async () =>
+    [DEMO_ANA, DEMO_BRUNO, DEMO_CARLA].flatMap((slug) => {
+      const profile = api.getProfile(slug);
+      return profile ? [{ slug, profile }] : [];
+    }),
   logout: async () => api.logout(),
   signUp: async (input) => api.signUp(input),
   verificarPerfil: async (userId) => api.verificarPerfil(userId),

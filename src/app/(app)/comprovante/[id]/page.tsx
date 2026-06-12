@@ -18,7 +18,7 @@ import { useToast } from "@/components/ui/toast";
 import { useCurrentUser, useData } from "@/lib/hooks";
 import { data } from "@/lib/data";
 import { RegraError } from "@/lib/errors";
-import { podeContestar } from "@/lib/api";
+import { podeContestar, estaEncerrada } from "@/lib/api";
 import { contestacaoSchema } from "@/lib/schemas";
 import { formatDateTime } from "@/lib/utils";
 import type { EventoTimeline } from "@/lib/types";
@@ -73,6 +73,7 @@ export default function ComprovantePage({
   const souDestinatario = user.id === encomenda.destinatario_id;
   const podeDarBaixa = souDestinatario && encomenda.status === "registrada";
   const retirada = encomenda.status === "retirada";
+  const encerrada = estaEncerrada(encomenda); // BR-07
 
   // contraparte que vou avaliar
   const contraparte = souDestinatario ? recebedor : destinatario;
@@ -105,7 +106,7 @@ export default function ComprovantePage({
 
       <div className="flex items-center justify-between">
         <h1 className="font-serif text-2xl text-tinta">Comprovante</h1>
-        <StatusBadge status={encomenda.status} />
+        <StatusBadge status={encerrada ? "encerrada" : encomenda.status} />
       </div>
 
       <Card>
@@ -146,10 +147,10 @@ export default function ComprovantePage({
         )}
       </div>
 
-      {/* QR Code do comprovante (P2.11) */}
+      {/* QR Code do comprovante */}
       <QrBloco codigo={encomenda.codigo_comprovante} />
 
-      {/* Linha do tempo (P2.13) */}
+      {/* Linha do tempo */}
       {timeline.length > 0 && <TimelineBloco eventos={timeline} />}
 
       {/* Avaliação (após retirada) — tela 8 */}

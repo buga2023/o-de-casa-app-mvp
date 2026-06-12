@@ -54,9 +54,19 @@ async function fetchProfile(id: string): Promise<Profile | null> {
   return (data as Profile) ?? null;
 }
 
+// Contas demo no Supabase (criadas por scripts/seed-supabase-demo.mjs).
+// O telefone fixo identifica cada perfil demo; a senha vem de
+// NEXT_PUBLIC_DEMO_PASSWORD (sem ela, o demo fica desligado).
+const DEMO_CONTAS: Record<string, { email: string; telefone: string }> = {
+  "demo-ana": { email: "ana.demo@odecasa.app", telefone: "71 99999-0001" },
+  "demo-bruno": { email: "bruno.demo@odecasa.app", telefone: "71 99999-0002" },
+  "demo-carla": { email: "carla.demo@odecasa.app", telefone: "71 99999-0003" },
+};
+const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD;
+
 export const supabaseDriver: DataAPI = {
   driver: "supabase",
-  supportsDemo: false,
+  supportsDemo: Boolean(DEMO_PASSWORD),
 
   async getCurrentUser() {
     const { data } = await sb().auth.getUser();
@@ -64,8 +74,35 @@ export const supabaseDriver: DataAPI = {
     return fetchProfile(data.user.id);
   },
 
-  async loginDemo() {
-    throw new RegraError("Login demo não está disponível no modo Supabase.");
+  async loginDemo(slug) {
+    const conta = DEMO_CONTAS[slug];
+    if (!conta || !DEMO_PASSWORD)
+      throw new RegraError("Login demo não está habilitado neste ambiente.");
+    const { error } = await sb().auth.signInWithPassword({
+      email: conta.email,
+      password: DEMO_PASSWORD,
+    });
+    if (error)
+      throw new RegraError(
+        "Conta demo indisponível. Rode scripts/seed-supabase-demo.mjs."
+      );
+  },
+
+  async getDemoProfiles() {
+    if (!DEMO_PASSWORD) return [];
+    const telefones = Object.values(DEMO_CONTAS).map((c) => c.telefone);
+    const { data, error } = await sb()
+      .from("profiles")
+      .select("*")
+      .in("telefone", telefones);
+    check(error);
+    const porTelefone = new Map(
+      (data as Profile[]).map((p) => [p.telefone, p])
+    );
+    return Object.entries(DEMO_CONTAS).flatMap(([slug, conta]) => {
+      const profile = porTelefone.get(conta.telefone);
+      return profile ? [{ slug, profile }] : [];
+    });
   },
 
   async logout() {

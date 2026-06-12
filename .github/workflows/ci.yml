@@ -1,4 +1,4 @@
-# CI — build + testes unitários + E2E a cada push/PR (P1.7)
+# Build + testes unitários + E2E a cada push/PR.
 name: CI
 
 on:

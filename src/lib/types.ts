@@ -77,6 +77,7 @@ export interface DBShape {
 // Regras de negócio expostas como constantes (SPEC.md)
 export const MAX_VIZINHOS_PLANO_GRATIS = 2; // BR-05
 export const CONTESTACAO_PRAZO_MS = 48 * 60 * 60 * 1000; // BR-06
+export const ENCERRAMENTO_PRAZO_MS = 7 * 24 * 60 * 60 * 1000; // BR-07: 7 dias após a retirada
 export const REPUTACAO_BLOQUEIO = 2.5; // BR-09: média abaixo disso bloqueia
 export const LIMITE_CONVITES_POR_HORA = 10; // anti-abuso
 export const LIMITE_REGISTROS_POR_HORA = 20; // anti-abuso

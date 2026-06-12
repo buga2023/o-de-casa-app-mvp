@@ -14,32 +14,27 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { useCurrentUser, useData } from "@/lib/hooks";
 import { data } from "@/lib/data";
-import { DEMO_ANA, DEMO_BRUNO, DEMO_CARLA } from "@/lib/seed";
-
-const DEMOS = [DEMO_ANA, DEMO_BRUNO, DEMO_CARLA];
+import { DEMO_ANA } from "@/lib/seed";
 
 export default function PerfilPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { user } = useCurrentUser();
 
-  const { data: demoProfiles = {} } = useData(
-    () => data.getProfilesMap(data.supportsDemo ? DEMOS : []),
-    []
-  );
+  const { data: demos = [] } = useData(() => data.getDemoProfiles(), []);
 
   if (!user) return null;
 
-  const ehDemo = data.supportsDemo && DEMOS.includes(user.id);
+  const ehDemo = demos.some((d) => d.profile.id === user.id);
 
   async function sair() {
     await data.logout();
     router.replace("/");
   }
 
-  async function trocarDemo(id: string) {
-    await data.loginDemo(id);
-    toast(`Agora você é ${demoProfiles[id]?.nome ?? "demo"}.`);
+  async function trocarDemo(slug: string, nome: string) {
+    await data.loginDemo(slug);
+    toast(`Agora você é ${nome}.`);
     router.replace("/inicio");
   }
 
@@ -99,17 +94,16 @@ export default function PerfilPage() {
             (registrar e receber).
           </p>
           <div className="grid grid-cols-3 gap-2">
-            {DEMOS.map((id) => {
-              const p = demoProfiles[id];
-              const atual = id === user.id;
+            {demos.map(({ slug, profile }) => {
+              const atual = profile.id === user.id;
               return (
                 <Button
-                  key={id}
+                  key={slug}
                   variant={atual ? "primary" : "outline"}
                   size="sm"
-                  onClick={() => !atual && trocarDemo(id)}
+                  onClick={() => !atual && trocarDemo(slug, profile.nome)}
                 >
-                  {p?.nome.split(" ")[0]}
+                  {profile.nome.split(" ")[0]}
                 </Button>
               );
             })}
@@ -118,7 +112,7 @@ export default function PerfilPage() {
       )}
 
       <div className="space-y-2 pt-2">
-        {ehDemo && (
+        {ehDemo && data.driver === "local" && (
           <Button variant="outline" className="w-full" onClick={resetar}>
             <RefreshCw className="h-4 w-4" /> Reiniciar dados demo
           </Button>

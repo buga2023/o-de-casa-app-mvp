@@ -1,4 +1,4 @@
-// Schemas Zod por tela (P0.2) — validação com mensagem por campo.
+// Schemas Zod por tela — validação com mensagem por campo.
 
 import { z } from "zod";
 

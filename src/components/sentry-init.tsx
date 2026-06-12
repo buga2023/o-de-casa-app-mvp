@@ -1,6 +1,6 @@
 "use client";
 
-// Observabilidade no cliente (P3.14). Inerte sem NEXT_PUBLIC_SENTRY_DSN.
+// Observabilidade no cliente. Inerte sem NEXT_PUBLIC_SENTRY_DSN.
 
 import { useEffect } from "react";
 

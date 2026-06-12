@@ -9,6 +9,7 @@ import { newId } from "@/lib/store";
 import { DEMO_ANA, DEMO_BRUNO, DEMO_CARLA } from "@/lib/seed";
 import {
   MAX_VIZINHOS_PLANO_GRATIS,
+  ENCERRAMENTO_PRAZO_MS,
   LIMITE_CONVITES_POR_HORA,
   LIMITE_REGISTROS_POR_HORA,
 } from "@/lib/types";
@@ -201,6 +202,36 @@ describe("BR-07 — baixa só pelo destinatário, uma vez", () => {
     const e = registrarDemo();
     api.darBaixa(e.id, DEMO_BRUNO);
     expect(() => api.darBaixa(e.id, DEMO_BRUNO)).toThrow(/já foi retirada/);
+  });
+});
+
+describe("BR-07 — encerramento automático 7 dias após a retirada", () => {
+  it("não encerra antes de completar 7 dias da retirada", () => {
+    const e = registrarDemo();
+    api.darBaixa(e.id, DEMO_BRUNO);
+    vi.setSystemTime(new Date(AGORA.getTime() + ENCERRAMENTO_PRAZO_MS - 1));
+    expect(api.estaEncerrada(api.getEncomenda(e.id)!)).toBe(false);
+  });
+
+  it("encerra passados 7 dias da retirada", () => {
+    const e = registrarDemo();
+    api.darBaixa(e.id, DEMO_BRUNO);
+    vi.setSystemTime(new Date(AGORA.getTime() + ENCERRAMENTO_PRAZO_MS + 1));
+    expect(api.estaEncerrada(api.getEncomenda(e.id)!)).toBe(true);
+  });
+
+  it("com contestação aberta não encerra", () => {
+    const e = registrarDemo();
+    api.darBaixa(e.id, DEMO_BRUNO);
+    api.abrirContestacao({ encomendaId: e.id, motivo: "Caixa violada" });
+    vi.setSystemTime(new Date(AGORA.getTime() + ENCERRAMENTO_PRAZO_MS + 1));
+    expect(api.estaEncerrada(api.getEncomenda(e.id)!)).toBe(false);
+  });
+
+  it("sem retirada não encerra", () => {
+    const e = registrarDemo();
+    vi.setSystemTime(new Date(AGORA.getTime() + ENCERRAMENTO_PRAZO_MS + 1));
+    expect(api.estaEncerrada(api.getEncomenda(e.id)!)).toBe(false);
   });
 });
 

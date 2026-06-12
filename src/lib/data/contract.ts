@@ -18,7 +18,10 @@ export interface DataAPI {
 
   // auth / perfil (RF-01)
   getCurrentUser(): Promise<Profile | null>;
-  loginDemo(userId: string): Promise<void>;
+  // slug: "demo-ana" | "demo-bruno" | "demo-carla" (ver lib/seed.ts)
+  loginDemo(slug: string): Promise<void>;
+  // perfis demo disponíveis (vazio quando o demo está desligado)
+  getDemoProfiles(): Promise<{ slug: string; profile: Profile }[]>;
   logout(): Promise<void>;
   signUp(input: SignUpInput): Promise<Profile>;
   verificarPerfil(userId: string): Promise<Profile>;
