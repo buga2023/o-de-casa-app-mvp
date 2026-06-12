@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
+  testMatch: /.*\.spec\.ts/, // *.test.ts são do Vitest
   timeout: 30_000,
   use: { baseURL: process.env.BASE_URL || 'http://localhost:3000', trace: 'on-first-retry' },
   webServer: {

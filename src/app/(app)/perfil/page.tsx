@@ -12,9 +12,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
-import { useCurrentUser, useStore } from "@/lib/hooks";
-import { logout, loginDemo, getProfile } from "@/lib/api";
-import { resetDB } from "@/lib/store";
+import { useCurrentUser, useData } from "@/lib/hooks";
+import { data } from "@/lib/data";
 import { DEMO_ANA, DEMO_BRUNO, DEMO_CARLA } from "@/lib/seed";
 
 const DEMOS = [DEMO_ANA, DEMO_BRUNO, DEMO_CARLA];
@@ -24,28 +23,29 @@ export default function PerfilPage() {
   const { toast } = useToast();
   const { user } = useCurrentUser();
 
-  // usado só para forçar re-render ao trocar de usuário
-  useStore(() => user?.id);
+  const { data: demoProfiles = {} } = useData(
+    () => data.getProfilesMap(data.supportsDemo ? DEMOS : []),
+    []
+  );
 
   if (!user) return null;
 
-  const ehDemo = DEMOS.includes(user.id);
+  const ehDemo = data.supportsDemo && DEMOS.includes(user.id);
 
-  function sair() {
-    logout();
+  async function sair() {
+    await data.logout();
     router.replace("/");
   }
 
-  function trocarDemo(id: string) {
-    loginDemo(id);
-    const p = getProfile(id);
-    toast(`Agora você é ${p?.nome ?? "demo"}.`);
+  async function trocarDemo(id: string) {
+    await data.loginDemo(id);
+    toast(`Agora você é ${demoProfiles[id]?.nome ?? "demo"}.`);
     router.replace("/inicio");
   }
 
-  function resetar() {
-    resetDB();
-    loginDemo(DEMO_ANA);
+  async function resetar() {
+    await data.resetDemo();
+    await data.loginDemo(DEMO_ANA);
     toast("Dados demo reiniciados.");
     router.replace("/inicio");
   }
@@ -73,6 +73,9 @@ export default function PerfilPage() {
                 <Badge variant="dourado">
                   <Star className="h-3.5 w-3.5 fill-current" /> {user.reputacao}
                 </Badge>
+                {user.bloqueado && (
+                  <Badge variant="terracota">bloqueado</Badge>
+                )}
               </div>
             </div>
           </div>
@@ -97,7 +100,7 @@ export default function PerfilPage() {
           </p>
           <div className="grid grid-cols-3 gap-2">
             {DEMOS.map((id) => {
-              const p = getProfile(id);
+              const p = demoProfiles[id];
               const atual = id === user.id;
               return (
                 <Button

@@ -5,30 +5,25 @@ import { Bell, CheckCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/states";
-import { useCurrentUser, useStore } from "@/lib/hooks";
-import {
-  listNotificacoes,
-  countNaoLidas,
-  marcarLida,
-  marcarTodasLidas,
-  getEncomenda,
-} from "@/lib/api";
+import { useCurrentUser, useData } from "@/lib/hooks";
+import { data } from "@/lib/data";
 import { formatDateTime } from "@/lib/utils";
 
 export default function NotificacoesPage() {
   const router = useRouter();
   const { user } = useCurrentUser();
 
-  const notificacoes = useStore(() =>
-    user ? listNotificacoes(user.id) : []
+  const { data: notificacoes = [] } = useData(
+    () => (user ? data.listNotificacoes(user.id) : Promise.resolve([])),
+    [user?.id]
   );
-  const naoLidas = useStore(() => (user ? countNaoLidas(user.id) : 0));
+  const naoLidas = notificacoes.filter((n) => !n.lida).length;
 
   if (!user) return null;
 
-  function abrir(notifId: string, encomendaId: string | null) {
-    marcarLida(notifId);
-    if (encomendaId && getEncomenda(encomendaId)) {
+  async function abrir(notifId: string, encomendaId: string | null) {
+    await data.marcarLida(notifId);
+    if (encomendaId && (await data.getEncomenda(encomendaId))) {
       router.push(`/comprovante/${encomendaId}`);
     }
   }
@@ -48,7 +43,7 @@ export default function NotificacoesPage() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => user && marcarTodasLidas(user.id)}
+            onClick={() => user && data.marcarTodasLidas(user.id)}
           >
             <CheckCheck className="h-4 w-4" /> Marcar lidas
           </Button>
@@ -72,7 +67,7 @@ export default function NotificacoesPage() {
                 onKeyDown={(e) =>
                   e.key === "Enter" && abrir(n.id, n.encomenda_id)
                 }
-                className={`flex cursor-pointer gap-3 p-3 ${
+                className={`flex cursor-pointer gap-3 p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracota/60 ${
                   n.lida ? "opacity-70" : "border-terracota/30"
                 }`}
               >

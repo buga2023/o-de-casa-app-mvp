@@ -5,16 +5,13 @@ import { useRouter } from "next/navigation";
 import { Camera, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input, Textarea, Label } from "@/components/ui/input";
+import { Textarea, Label } from "@/components/ui/input";
 import { EmptyState } from "@/components/states";
 import { useToast } from "@/components/ui/toast";
-import { useCurrentUser, useStore } from "@/lib/hooks";
-import {
-  getDestinatariosDisponiveis,
-  registrarEncomenda,
-  fileToDataUrl,
-  RegraError,
-} from "@/lib/api";
+import { useCurrentUser, useData } from "@/lib/hooks";
+import { data } from "@/lib/data";
+import { RegraError } from "@/lib/errors";
+import { registrarSchema } from "@/lib/schemas";
 
 export default function RegistrarPage() {
   const router = useRouter();
@@ -22,37 +19,51 @@ export default function RegistrarPage() {
   const { user } = useCurrentUser();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const destinatarios = useStore(() =>
-    user ? getDestinatariosDisponiveis(user.id) : []
+  const { data: destinatarios = [], ready } = useData(
+    () =>
+      user ? data.getDestinatariosDisponiveis(user.id) : Promise.resolve([]),
+    [user?.id]
   );
 
   const [destinatarioId, setDestinatarioId] = useState("");
   const [descricao, setDescricao] = useState("");
   const [fotoUrl, setFotoUrl] = useState("");
+  const [carregandoFoto, setCarregandoFoto] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [erros, setErros] = useState<Record<string, string>>({});
 
   if (!user) return null;
 
   async function onFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setCarregandoFoto(true);
     try {
-      const url = await fileToDataUrl(file);
+      // comprime no cliente (4MB → ~200KB) e persiste conforme o driver
+      const url = await data.uploadFoto(file);
       setFotoUrl(url);
+      setErros((prev) => ({ ...prev, fotoUrl: "" }));
     } catch {
       toast("Não consegui ler a foto. Tente outra.", "erro");
+    } finally {
+      setCarregandoFoto(false);
     }
   }
 
-  function salvar() {
+  async function salvar() {
     if (!user) return;
-    if (!fotoUrl) {
-      toast("A foto é obrigatória (BR-03).", "erro");
+    const parsed = registrarSchema.safeParse({ destinatarioId, fotoUrl, descricao });
+    if (!parsed.success) {
+      const porCampo: Record<string, string> = {};
+      parsed.error.issues.forEach((i) => {
+        porCampo[String(i.path[0])] = i.message;
+      });
+      setErros(porCampo);
       return;
     }
     setSalvando(true);
     try {
-      const enc = registrarEncomenda({
+      const enc = await data.registrarEncomenda({
         recebedorId: user.id,
         destinatarioId,
         descricao,
@@ -68,7 +79,7 @@ export default function RegistrarPage() {
     }
   }
 
-  if (destinatarios.length === 0) {
+  if (ready && destinatarios.length === 0) {
     return (
       <div className="space-y-4">
         <h1 className="font-serif text-2xl text-tinta">Registrar encomenda</h1>
@@ -80,7 +91,8 @@ export default function RegistrarPage() {
     );
   }
 
-  const podeSalvar = Boolean(fotoUrl && destinatarioId) && !salvando;
+  const podeSalvar =
+    Boolean(fotoUrl && destinatarioId) && !salvando && !carregandoFoto;
 
   return (
     <div className="space-y-5">
@@ -115,7 +127,7 @@ export default function RegistrarPage() {
               type="button"
               aria-label="Remover foto"
               onClick={() => setFotoUrl("")}
-              className="absolute right-2 top-2 rounded-full bg-tinta/70 p-1.5 text-creme"
+              className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-tinta/70 text-creme"
             >
               <X className="h-4 w-4" />
             </button>
@@ -124,11 +136,23 @@ export default function RegistrarPage() {
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed border-linha bg-white text-tinta/60"
+            disabled={carregandoFoto}
+            className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed border-linha bg-white text-tinta/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracota/60"
           >
-            <Camera className="h-8 w-8 text-terracota" />
-            <span className="text-sm font-medium">Tirar / escolher foto</span>
+            {carregandoFoto ? (
+              <Loader2 className="h-8 w-8 animate-spin text-terracota" />
+            ) : (
+              <Camera className="h-8 w-8 text-terracota" />
+            )}
+            <span className="text-sm font-medium">
+              {carregandoFoto ? "Processando foto…" : "Tirar / escolher foto"}
+            </span>
           </button>
+        )}
+        {erros.fotoUrl && (
+          <p role="alert" className="mt-1 text-xs text-terracota">
+            {erros.fotoUrl}
+          </p>
         )}
       </div>
 
@@ -141,9 +165,10 @@ export default function RegistrarPage() {
               key={d.id}
               role="button"
               tabIndex={0}
+              aria-pressed={destinatarioId === d.id}
               onClick={() => setDestinatarioId(d.id)}
               onKeyDown={(e) => e.key === "Enter" && setDestinatarioId(d.id)}
-              className={`flex cursor-pointer items-center justify-between p-3 ${
+              className={`flex min-h-11 cursor-pointer items-center justify-between p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracota/60 ${
                 destinatarioId === d.id
                   ? "ring-2 ring-terracota"
                   : "hover:bg-tinta/[0.02]"
@@ -154,6 +179,11 @@ export default function RegistrarPage() {
             </Card>
           ))}
         </div>
+        {erros.destinatarioId && (
+          <p role="alert" className="mt-1 text-xs text-terracota">
+            {erros.destinatarioId}
+          </p>
+        )}
       </div>
 
       {/* Descrição */}
@@ -165,6 +195,11 @@ export default function RegistrarPage() {
           value={descricao}
           onChange={(e) => setDescricao(e.target.value)}
         />
+        {erros.descricao && (
+          <p role="alert" className="mt-1 text-xs text-terracota">
+            {erros.descricao}
+          </p>
+        )}
       </div>
 
       <Button

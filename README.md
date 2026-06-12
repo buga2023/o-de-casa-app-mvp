@@ -29,3 +29,37 @@ Tailwind + shadcn/ui · Zod + React Hook Form · Deploy na Vercel.
 > Para Lovable/Bolt (geradores one-shot): cole `SPEC.md` + `db/schema.sql` + `DESIGN.md`.
 > Para agentes iterativos (Cursor/Windsurf/Claude Code): use o harness inteiro — é onde o
 > loop de reparo brilha.
+
+---
+
+## Rodando o app
+
+```bash
+npm install
+npm run dev          # http://localhost:3000 (modo demo, dados no localStorage)
+npm run test:unit    # Vitest — regras de negócio BR-01..09
+npm run test:smoke   # Playwright — caminho-feliz + caminhos-tristes
+npm run build        # build de produção
+```
+
+## Drivers de dados (MELHORIAS.md P0.1)
+
+A camada `src/lib/data` tem uma interface única com dois drivers, escolhidos por env:
+
+- **`local`** (padrão): tudo no `localStorage`, com botão "Entrar como demo".
+- **`supabase`**: backend real com RLS. Para ativar:
+  1. Crie um projeto no Supabase e rode `db/schema.sql` no SQL Editor
+     (inclui triggers de reputação BR-09 e anti-abuso).
+  2. Habilite **Authentication → Providers → Anonymous sign-in**.
+  3. Copie `.env.example` para `.env.local` e preencha
+     `NEXT_PUBLIC_DATA_DRIVER=supabase`, URL e anon key.
+
+## Deploy (Vercel — MELHORIAS.md P3.15)
+
+1. Suba o repo no GitHub (o CI em `.github/workflows/ci.yml` roda build + testes).
+2. Importe o repo na Vercel (framework: Next.js, sem config extra).
+3. Defina as envs do `.env.example` no painel da Vercel.
+4. A URL pública servirá de QR Code para a banca.
+
+Observabilidade: defina `NEXT_PUBLIC_SENTRY_DSN` para ativar o Sentry
+(cliente + servidor + error boundaries). Sem a env, fica inerte.

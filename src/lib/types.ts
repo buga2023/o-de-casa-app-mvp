@@ -77,3 +77,14 @@ export interface DBShape {
 // Regras de negócio expostas como constantes (SPEC.md)
 export const MAX_VIZINHOS_PLANO_GRATIS = 2; // BR-05
 export const CONTESTACAO_PRAZO_MS = 48 * 60 * 60 * 1000; // BR-06
+export const REPUTACAO_BLOQUEIO = 2.5; // BR-09: média abaixo disso bloqueia
+export const LIMITE_CONVITES_POR_HORA = 10; // anti-abuso
+export const LIMITE_REGISTROS_POR_HORA = 20; // anti-abuso
+
+// Evento derivado dos dados existentes (encomenda, notificações, avaliações,
+// contestações) — não há tabela própria; ver getTimeline em api.ts.
+export interface EventoTimeline {
+  tipo: "registrada" | "notificada" | "retirada" | "avaliada" | "contestada";
+  titulo: string;
+  at: string;
+}

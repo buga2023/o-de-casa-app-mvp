@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Users, Plus, Bell, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useCurrentUser, useStore } from "@/lib/hooks";
-import { countNaoLidas } from "@/lib/api";
+import { useCurrentUser, useData } from "@/lib/hooks";
+import { data } from "@/lib/data";
 
 const items = [
   { href: "/inicio", label: "Início", icon: Home },
@@ -18,7 +18,10 @@ const items = [
 export function BottomNav() {
   const pathname = usePathname();
   const { user } = useCurrentUser();
-  const naoLidas = useStore(() => (user ? countNaoLidas(user.id) : 0));
+  const { data: naoLidas = 0 } = useData(
+    () => (user ? data.countNaoLidas(user.id) : Promise.resolve(0)),
+    [user?.id]
+  );
 
   return (
     <nav
@@ -34,6 +37,7 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               aria-label={item.label}
+              aria-current={active ? "page" : undefined}
               className="relative flex flex-1 flex-col items-center justify-center py-1.5"
             >
               <span className="flex h-12 w-12 -translate-y-3 items-center justify-center rounded-full bg-terracota text-creme shadow-soft">
@@ -50,8 +54,9 @@ export function BottomNav() {
             key={item.href}
             href={item.href}
             aria-label={item.label}
+            aria-current={active ? "page" : undefined}
             className={cn(
-              "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px]",
+              "relative flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px]",
               active ? "text-terracota" : "text-tinta/50"
             )}
           >

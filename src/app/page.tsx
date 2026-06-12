@@ -6,7 +6,7 @@ import { PackageCheck, Camera, BellRing } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { useCurrentUser } from "@/lib/hooks";
-import { loginDemo } from "@/lib/api";
+import { data } from "@/lib/data";
 import { DEMO_ANA } from "@/lib/seed";
 
 export default function LandingPage() {
@@ -17,8 +17,8 @@ export default function LandingPage() {
     if (ready && user) router.replace("/inicio");
   }, [ready, user, router]);
 
-  function entrarComoDemo() {
-    loginDemo(DEMO_ANA);
+  async function entrarComoDemo() {
+    await data.loginDemo(DEMO_ANA);
     router.replace("/inicio");
   }
 
@@ -45,20 +45,24 @@ export default function LandingPage() {
       </div>
 
       <div className="space-y-3">
-        <Button className="w-full" size="lg" onClick={entrarComoDemo}>
-          Entrar como demo
-        </Button>
+        {data.supportsDemo && (
+          <Button className="w-full" size="lg" onClick={entrarComoDemo}>
+            Entrar como demo
+          </Button>
+        )}
         <Button
-          variant="outline"
+          variant={data.supportsDemo ? "outline" : "primary"}
           className="w-full"
           size="lg"
           onClick={() => router.push("/cadastro")}
         >
           Criar minha conta
         </Button>
-        <p className="text-center text-xs text-tinta/50">
-          Modo demo: percorra o fluxo completo sem cadastro.
-        </p>
+        {data.supportsDemo && (
+          <p className="text-center text-xs text-tinta/50">
+            Modo demo: percorra o fluxo completo sem cadastro.
+          </p>
+        )}
       </div>
     </main>
   );

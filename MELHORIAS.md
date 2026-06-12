@@ -1,5 +1,16 @@
 # MELHORIAS.md — Roadmap para deixar o MVP mais sólido
 
+> **STATUS (2026-06-12): todos os itens implementados.**
+> P0: camada `src/lib/data` (drivers local/supabase por env), Zod+RHF com erro
+> por campo e máscaras, error boundaries/not-found, UUID + código base32 legível.
+> P1: Vitest cobrindo BR-01..09 (30 testes), E2E com caminhos-tristes (10 testes),
+> CI em `.github/workflows/ci.yml`, passe de a11y (labels, foco, alvos 44px, aria).
+> P2: compressão de foto client-side, PWA (manifest+SW) com notificações,
+> QR Code no comprovante, reputação recalculada com bloqueio BR-09, timeline.
+> P3: Sentry inerte sem DSN, guia de deploy Vercel no README, anti-abuso
+> (limites/hora no app + triggers SQL). Dívidas técnicas: todas pagas.
+> Pendências externas: criar projeto Supabase, conta Sentry e deploy (ver README).
+
 Estado atual: caminho-feliz funcionando ponta a ponta (8 telas), backend **mock local**
 (localStorage), cobertura **E2E Playwright** (4 testes verdes), build limpo.
 Este documento lista melhorias **priorizadas** para robustez, qualidade e produção.

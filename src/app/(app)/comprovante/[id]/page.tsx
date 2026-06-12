@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Share2,
@@ -8,24 +8,20 @@ import {
   Star,
   AlertTriangle,
   ArrowLeft,
+  QrCode,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea, Label } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge, EmptyState } from "@/components/states";
 import { useToast } from "@/components/ui/toast";
-import { useCurrentUser, useStore } from "@/lib/hooks";
-import {
-  getEncomenda,
-  getProfile,
-  darBaixa,
-  podeContestar,
-  avaliar,
-  abrirContestacao,
-  RegraError,
-} from "@/lib/api";
+import { useCurrentUser, useData } from "@/lib/hooks";
+import { data } from "@/lib/data";
+import { RegraError } from "@/lib/errors";
+import { podeContestar } from "@/lib/api";
+import { contestacaoSchema } from "@/lib/schemas";
 import { formatDateTime } from "@/lib/utils";
+import type { EventoTimeline } from "@/lib/types";
 
 export default function ComprovantePage({
   params,
@@ -37,12 +33,29 @@ export default function ComprovantePage({
   const { toast } = useToast();
   const { user } = useCurrentUser();
 
-  const encomenda = useStore(() => getEncomenda(id));
-  const [avaliado, setAvaliado] = useState(false);
+  const { data: encomenda, ready } = useData(() => data.getEncomenda(id), [id]);
+  const { data: pessoas = {} } = useData(
+    () =>
+      encomenda
+        ? data.getProfilesMap([encomenda.recebedor_id, encomenda.destinatario_id])
+        : data.getProfilesMap([]),
+    [encomenda?.id]
+  );
+  const { data: timeline = [] } = useData(
+    () => (encomenda ? data.getTimeline(id) : Promise.resolve([])),
+    [encomenda?.id, encomenda?.status, encomenda?.retirada_at]
+  );
+  const { data: avaliado = false } = useData(
+    () =>
+      encomenda && user
+        ? data.jaAvaliou(encomenda.id, user.id)
+        : Promise.resolve(false),
+    [encomenda?.id, user?.id]
+  );
 
   if (!user) return null;
 
-  if (!encomenda) {
+  if (ready && !encomenda) {
     return (
       <div className="space-y-4">
         <BackButton onClick={() => router.push("/inicio")} />
@@ -53,12 +66,12 @@ export default function ComprovantePage({
       </div>
     );
   }
+  if (!encomenda) return null; // carregando
 
-  const recebedor = getProfile(encomenda.recebedor_id);
-  const destinatario = getProfile(encomenda.destinatario_id);
+  const recebedor = pessoas[encomenda.recebedor_id];
+  const destinatario = pessoas[encomenda.destinatario_id];
   const souDestinatario = user.id === encomenda.destinatario_id;
-  const podeDarBaixa =
-    souDestinatario && encomenda.status === "registrada";
+  const podeDarBaixa = souDestinatario && encomenda.status === "registrada";
   const retirada = encomenda.status === "retirada";
 
   // contraparte que vou avaliar
@@ -67,8 +80,7 @@ export default function ComprovantePage({
   function compartilhar() {
     if (!encomenda) return;
     const texto = `Comprovante Ô de Casa! — ${encomenda.codigo_comprovante}`;
-    const url =
-      typeof window !== "undefined" ? window.location.href : "";
+    const url = typeof window !== "undefined" ? window.location.href : "";
     if (typeof navigator !== "undefined" && navigator.share) {
       navigator.share({ title: "Ô de Casa!", text: texto, url }).catch(() => {});
     } else if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -77,10 +89,10 @@ export default function ComprovantePage({
     }
   }
 
-  function confirmarBaixa() {
+  async function confirmarBaixa() {
     if (!user || !encomenda) return;
     try {
-      darBaixa(encomenda.id, user.id);
+      await data.darBaixa(encomenda.id, user.id);
       toast("Baixa confirmada. Recebedor notificado.");
     } catch (err) {
       toast(err instanceof RegraError ? err.message : "Erro.", "erro");
@@ -134,19 +146,24 @@ export default function ComprovantePage({
         )}
       </div>
 
+      {/* QR Code do comprovante (P2.11) */}
+      <QrBloco codigo={encomenda.codigo_comprovante} />
+
+      {/* Linha do tempo (P2.13) */}
+      {timeline.length > 0 && <TimelineBloco eventos={timeline} />}
+
       {/* Avaliação (após retirada) — tela 8 */}
       {retirada && contraparte && !avaliado && (
         <AvaliacaoForm
-          onSubmit={(nota, comentario) => {
+          onSubmit={async (nota, comentario) => {
             try {
-              avaliar({
+              await data.avaliar({
                 encomendaId: encomenda.id,
                 deId: user.id,
                 paraId: contraparte.id,
                 nota,
                 comentario,
               });
-              setAvaliado(true);
               toast("Avaliação registrada. Obrigado!");
             } catch (err) {
               toast(err instanceof RegraError ? err.message : "Erro.", "erro");
@@ -155,10 +172,8 @@ export default function ComprovantePage({
           nome={contraparte.nome}
         />
       )}
-      {avaliado && (
-        <p className="text-center text-sm text-verde">
-          Avaliação enviada ✓
-        </p>
+      {retirada && avaliado && (
+        <p className="text-center text-sm text-verde">Avaliação enviada ✓</p>
       )}
 
       {/* Contestação (BR-06: 48h do registro) — tela 8 */}
@@ -177,7 +192,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-1 text-sm text-tinta/60"
+      className="inline-flex min-h-11 items-center gap-1 text-sm text-tinta/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracota/60"
     >
       <ArrowLeft className="h-4 w-4" /> Voltar
     </button>
@@ -207,6 +222,86 @@ function Linha({
   );
 }
 
+// QR do link público do comprovante — escanear abre esta página.
+function QrBloco({ codigo }: { codigo: string }) {
+  const [aberto, setAberto] = useState(false);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!aberto || qrUrl) return;
+    const url = window.location.href;
+    import("qrcode").then((QRCode) =>
+      QRCode.toDataURL(url, { width: 240, margin: 1 }).then(setQrUrl)
+    );
+  }, [aberto, qrUrl]);
+
+  return (
+    <Card>
+      <CardContent className="pt-4">
+        <button
+          onClick={() => setAberto((a) => !a)}
+          aria-expanded={aberto}
+          className="flex min-h-11 w-full items-center justify-center gap-2 text-sm font-medium text-tinta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracota/60"
+        >
+          <QrCode className="h-4 w-4 text-terracota" />
+          {aberto ? "Esconder QR Code" : "Mostrar QR Code"}
+        </button>
+        {aberto && (
+          <div className="mt-3 flex flex-col items-center gap-2 pb-2">
+            {qrUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={qrUrl}
+                alt={`QR Code do comprovante ${codigo}`}
+                className="h-60 w-60 rounded-xl border border-linha bg-white p-2"
+              />
+            ) : (
+              <div className="h-60 w-60 animate-pulse rounded-xl bg-tinta/5" />
+            )}
+            <p className="font-mono text-xs text-tinta/60">{codigo}</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TimelineBloco({ eventos }: { eventos: EventoTimeline[] }) {
+  return (
+    <Card>
+      <CardContent className="pt-4">
+        <p className="mb-3 font-serif text-lg text-tinta">Linha do tempo</p>
+        <ol className="space-y-0">
+          {eventos.map((ev, i) => (
+            <li key={`${ev.tipo}-${ev.at}-${i}`} className="relative flex gap-3 pb-4 last:pb-0">
+              {i < eventos.length - 1 && (
+                <span
+                  aria-hidden
+                  className="absolute left-[5px] top-4 h-full w-px bg-linha"
+                />
+              )}
+              <span
+                aria-hidden
+                className={`mt-1.5 h-[11px] w-[11px] shrink-0 rounded-full ${
+                  ev.tipo === "contestada"
+                    ? "bg-terracota"
+                    : ev.tipo === "retirada"
+                      ? "bg-verde"
+                      : "bg-dourado"
+                }`}
+              />
+              <div>
+                <p className="text-sm font-medium text-tinta">{ev.titulo}</p>
+                <p className="text-xs text-tinta/50">{formatDateTime(ev.at)}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </CardContent>
+    </Card>
+  );
+}
+
 function AvaliacaoForm({
   nome,
   onSubmit,
@@ -220,25 +315,27 @@ function AvaliacaoForm({
     <Card>
       <CardContent className="space-y-3 pt-4">
         <p className="font-serif text-lg text-tinta">Avaliar {nome}</p>
-        <div className="flex gap-1">
+        <div className="flex gap-1" role="radiogroup" aria-label="Nota de 1 a 5">
           {[1, 2, 3, 4, 5].map((n) => (
             <button
               key={n}
               type="button"
+              role="radio"
+              aria-checked={n === nota}
               aria-label={`Nota ${n}`}
               onClick={() => setNota(n)}
+              className="flex h-11 w-11 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracota/60"
             >
               <Star
                 className={`h-7 w-7 ${
-                  n <= nota
-                    ? "fill-dourado text-dourado"
-                    : "text-tinta/25"
+                  n <= nota ? "fill-dourado text-dourado" : "text-tinta/25"
                 }`}
               />
             </button>
           ))}
         </div>
         <Textarea
+          aria-label="Comentário da avaliação"
           placeholder="Comentário (opcional)"
           value={comentario}
           onChange={(e) => setComentario(e.target.value)}
@@ -263,6 +360,7 @@ function ContestacaoBloco({
   const { toast } = useToast();
   const [aberto, setAberto] = useState(false);
   const [motivo, setMotivo] = useState("");
+  const [erro, setErro] = useState("");
 
   if (contestada) {
     return (
@@ -280,9 +378,14 @@ function ContestacaoBloco({
     );
   }
 
-  function enviar() {
+  async function enviar() {
+    const parsed = contestacaoSchema.safeParse({ motivo });
+    if (!parsed.success) {
+      setErro(parsed.error.issues[0].message);
+      return;
+    }
     try {
-      abrirContestacao({ encomendaId, motivo });
+      await data.abrirContestacao({ encomendaId, motivo });
       toast("Contestação aberta.");
       setAberto(false);
     } catch (err) {
@@ -293,12 +396,22 @@ function ContestacaoBloco({
   return aberto ? (
     <Card>
       <CardContent className="space-y-3 pt-4">
-        <Label>Motivo da contestação</Label>
+        <Label htmlFor="motivo">Motivo da contestação</Label>
         <Textarea
+          id="motivo"
           placeholder="Descreva o problema"
+          aria-invalid={Boolean(erro)}
           value={motivo}
-          onChange={(e) => setMotivo(e.target.value)}
+          onChange={(e) => {
+            setMotivo(e.target.value);
+            if (erro) setErro("");
+          }}
         />
+        {erro && (
+          <p role="alert" className="text-xs text-terracota">
+            {erro}
+          </p>
+        )}
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -307,11 +420,7 @@ function ContestacaoBloco({
           >
             Cancelar
           </Button>
-          <Button
-            className="flex-1"
-            disabled={!motivo.trim()}
-            onClick={enviar}
-          >
+          <Button className="flex-1" disabled={!motivo.trim()} onClick={enviar}>
             Enviar
           </Button>
         </div>
@@ -320,7 +429,7 @@ function ContestacaoBloco({
   ) : (
     <button
       onClick={() => setAberto(true)}
-      className="flex w-full items-center justify-center gap-2 text-sm text-terracota"
+      className="flex min-h-11 w-full items-center justify-center gap-2 text-sm text-terracota focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracota/60"
     >
       <AlertTriangle className="h-4 w-4" /> Abrir contestação (até 48h)
     </button>

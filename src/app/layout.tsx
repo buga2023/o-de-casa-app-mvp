@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/toast";
+import { SentryInit } from "@/components/sentry-init";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -35,6 +36,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${fraunces.variable} ${inter.variable}`}>
       <body className="min-h-dvh bg-creme text-tinta antialiased">
+        <SentryInit />
         <ToastProvider>
           <div className="mx-auto min-h-dvh max-w-app bg-creme">{children}</div>
         </ToastProvider>

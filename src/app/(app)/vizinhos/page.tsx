@@ -8,17 +8,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/states";
 import { useToast } from "@/components/ui/toast";
-import { useCurrentUser, useStore } from "@/lib/hooks";
-import {
-  getVizinhosAtivos,
-  countVizinhosAtivos,
-  listConvitesPendentes,
-  convidarVizinho,
-  responderConvite,
-  searchProfiles,
-  getProfile,
-  RegraError,
-} from "@/lib/api";
+import { useCurrentUser, useData } from "@/lib/hooks";
+import { data } from "@/lib/data";
+import { RegraError } from "@/lib/errors";
 import { MAX_VIZINHOS_PLANO_GRATIS } from "@/lib/types";
 
 export default function VizinhosPage() {
@@ -26,23 +18,34 @@ export default function VizinhosPage() {
   const { user } = useCurrentUser();
   const [q, setQ] = useState("");
 
-  const ativos = useStore(() => (user ? getVizinhosAtivos(user.id) : []));
-  const ativosCount = useStore(() =>
-    user ? countVizinhosAtivos(user.id) : 0
+  const { data: ativos = [] } = useData(
+    () => (user ? data.getVizinhosAtivos(user.id) : Promise.resolve([])),
+    [user?.id]
   );
-  const convites = useStore(() =>
-    user ? listConvitesPendentes(user.id) : []
+  const { data: convites = [] } = useData(
+    () => (user ? data.listConvitesPendentes(user.id) : Promise.resolve([])),
+    [user?.id]
+  );
+  const { data: moradores = {} } = useData(
+    () => data.getProfilesMap(convites.map((c) => c.morador_id)),
+    [convites.map((c) => c.morador_id).join(",")]
+  );
+  const { data: resultados = [] } = useData(
+    () =>
+      q.trim() && user
+        ? data.searchProfiles(q, user.id)
+        : Promise.resolve([]),
+    [q, user?.id]
   );
 
   if (!user) return null;
 
-  const noLimite = ativosCount >= MAX_VIZINHOS_PLANO_GRATIS;
-  const resultados = q.trim() ? searchProfiles(q, user.id) : [];
+  const noLimite = ativos.length >= MAX_VIZINHOS_PLANO_GRATIS;
 
-  function convidar(vizinhoId: string) {
+  async function convidar(vizinhoId: string) {
     if (!user) return;
     try {
-      convidarVizinho(user.id, vizinhoId);
+      await data.convidarVizinho(user.id, vizinhoId);
       toast("Convite enviado.");
       setQ("");
     } catch (err) {
@@ -50,9 +53,9 @@ export default function VizinhosPage() {
     }
   }
 
-  function responder(vinculoId: string, aceitar: boolean) {
+  async function responder(vinculoId: string, aceitar: boolean) {
     try {
-      responderConvite(vinculoId, aceitar);
+      await data.responderConvite(vinculoId, aceitar);
       toast(aceitar ? "Vínculo ativado." : "Convite recusado.");
     } catch (err) {
       toast(err instanceof RegraError ? err.message : "Erro.", "erro");
@@ -75,7 +78,7 @@ export default function VizinhosPage() {
             Convites para você
           </h2>
           {convites.map((c) => {
-            const morador = getProfile(c.morador_id);
+            const morador = moradores[c.morador_id];
             return (
               <Card key={c.id} className="flex items-center gap-3 p-3">
                 <div className="min-w-0 flex-1">
@@ -88,7 +91,7 @@ export default function VizinhosPage() {
                   size="sm"
                   variant="secondary"
                   onClick={() => responder(c.id, true)}
-                  aria-label={`Aceitar convite de ${morador?.nome}`}
+                  aria-label={`Aceitar convite de ${morador?.nome ?? "vizinho"}`}
                 >
                   <Check className="h-4 w-4" /> Aceitar
                 </Button>
@@ -96,7 +99,7 @@ export default function VizinhosPage() {
                   size="icon"
                   variant="outline"
                   onClick={() => responder(c.id, false)}
-                  aria-label={`Recusar convite de ${morador?.nome}`}
+                  aria-label={`Recusar convite de ${morador?.nome ?? "vizinho"}`}
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -113,7 +116,7 @@ export default function VizinhosPage() {
             Vizinhos ativos
           </h2>
           <Badge variant={noLimite ? "terracota" : "neutral"}>
-            {ativosCount}/{MAX_VIZINHOS_PLANO_GRATIS} (plano grátis)
+            {ativos.length}/{MAX_VIZINHOS_PLANO_GRATIS} (plano grátis)
           </Badge>
         </div>
         {ativos.length === 0 ? (
@@ -125,16 +128,18 @@ export default function VizinhosPage() {
         ) : (
           <ul className="space-y-2">
             {ativos.map((v) => (
-              <Card key={v.id} className="flex items-center gap-3 p-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-verde/12 text-verde">
-                  <ShieldCheck className="h-5 w-5" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-tinta">{v.nome}</p>
-                  <p className="text-xs text-tinta/60">{v.condominio}</p>
-                </div>
-                <Badge variant="verde">ativo</Badge>
-              </Card>
+              <li key={v.id}>
+                <Card className="flex items-center gap-3 p-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-verde/12 text-verde">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-tinta">{v.nome}</p>
+                    <p className="text-xs text-tinta/60">{v.condominio}</p>
+                  </div>
+                  <Badge variant="verde">ativo</Badge>
+                </Card>
+              </li>
             ))}
           </ul>
         )}
@@ -160,29 +165,36 @@ export default function VizinhosPage() {
             disabled={noLimite}
           />
         </div>
+        {q.trim() && resultados.length === 0 && (
+          <p className="px-1 text-xs text-tinta/50">
+            Nenhum vizinho encontrado com esse nome ou telefone.
+          </p>
+        )}
         {resultados.length > 0 && (
           <ul className="space-y-2">
             {resultados.map((p) => (
-              <Card key={p.id} className="flex items-center gap-3 p-3">
-                <div className="flex-1">
-                  <p className="font-medium text-tinta">
-                    {p.nome}{" "}
-                    {p.verificado && (
-                      <Badge variant="dourado" className="ml-1">
-                        verificado
-                      </Badge>
-                    )}
-                  </p>
-                  <p className="text-xs text-tinta/60">{p.telefone}</p>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => convidar(p.id)}
-                  disabled={!p.verificado || p.bloqueado}
-                >
-                  <UserPlus className="h-4 w-4" /> Convidar
-                </Button>
-              </Card>
+              <li key={p.id}>
+                <Card className="flex items-center gap-3 p-3">
+                  <div className="flex-1">
+                    <p className="font-medium text-tinta">
+                      {p.nome}{" "}
+                      {p.verificado && (
+                        <Badge variant="dourado" className="ml-1">
+                          verificado
+                        </Badge>
+                      )}
+                    </p>
+                    <p className="text-xs text-tinta/60">{p.telefone}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => convidar(p.id)}
+                    disabled={!p.verificado || p.bloqueado}
+                  >
+                    <UserPlus className="h-4 w-4" /> Convidar
+                  </Button>
+                </Card>
+              </li>
             ))}
           </ul>
         )}

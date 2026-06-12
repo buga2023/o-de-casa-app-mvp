@@ -2,66 +2,63 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, ShieldCheck, Loader2 } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { signUp, verificarPerfil } from "@/lib/api";
-
-type Form = {
-  nome: string;
-  telefone: string;
-  endereco: string;
-  cep: string;
-  condominio: string;
-};
-
-const vazio: Form = {
-  nome: "",
-  telefone: "",
-  endereco: "",
-  cep: "",
-  condominio: "",
-};
+import { data } from "@/lib/data";
+import { RegraError } from "@/lib/errors";
+import { cadastroSchema, type CadastroForm } from "@/lib/schemas";
+import { maskTelefone, maskCep } from "@/lib/masks";
 
 export default function CadastroPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [form, setForm] = useState<Form>(vazio);
   const [passo, setPasso] = useState<1 | 2>(1);
   const [novoId, setNovoId] = useState<string | null>(null);
   const [verificando, setVerificando] = useState(false);
 
-  function set<K extends keyof Form>(k: K, v: string) {
-    setForm((f) => ({ ...f, [k]: v }));
-  }
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    getValues,
+    formState: { errors, isSubmitting },
+  } = useForm<CadastroForm>({
+    resolver: zodResolver(cadastroSchema),
+    mode: "onTouched",
+    defaultValues: { nome: "", telefone: "", endereco: "", cep: "", condominio: "" },
+  });
 
-  const camposOk =
-    form.nome.trim().length >= 2 &&
-    form.telefone.trim().length >= 8 &&
-    form.endereco.trim().length >= 3 &&
-    form.cep.trim().length >= 5;
-
-  function criarConta(e: React.FormEvent) {
-    e.preventDefault();
-    if (!camposOk) {
-      toast("Preencha nome, celular, endereço e CEP.", "erro");
-      return;
+  const criarConta = handleSubmit(async (values) => {
+    try {
+      const p = await data.signUp({ ...values, condominio: values.condominio ?? "" });
+      setNovoId(p.id);
+      setPasso(2);
+    } catch (err) {
+      toast(
+        err instanceof RegraError ? err.message : "Erro ao criar a conta.",
+        "erro"
+      );
     }
-    const p = signUp(form);
-    setNovoId(p.id);
-    setPasso(2);
-  }
+  });
 
-  function confirmarVerificacao() {
+  async function confirmarVerificacao() {
     if (!novoId) return;
     setVerificando(true);
     // "verificação em 2 passos" simulada
-    setTimeout(() => {
-      verificarPerfil(novoId);
-      toast("Conta verificada!");
-      router.replace("/inicio");
+    setTimeout(async () => {
+      try {
+        await data.verificarPerfil(novoId);
+        toast("Conta verificada!");
+        router.replace("/inicio");
+      } catch {
+        toast("Erro ao verificar. Tente de novo.", "erro");
+        setVerificando(false);
+      }
     }, 700);
   }
 
@@ -69,7 +66,7 @@ export default function CadastroPage() {
     <main className="flex min-h-dvh flex-col px-5 py-8">
       <button
         onClick={() => (passo === 2 ? setPasso(1) : router.push("/"))}
-        className="mb-4 inline-flex items-center gap-1 text-sm text-tinta/60"
+        className="mb-4 inline-flex min-h-11 items-center gap-1 text-sm text-tinta/60"
       >
         <ArrowLeft className="h-4 w-4" /> Voltar
       </button>
@@ -77,56 +74,83 @@ export default function CadastroPage() {
       <Brand className="text-2xl" />
 
       {passo === 1 ? (
-        <form onSubmit={criarConta} className="mt-4 space-y-4">
+        <form onSubmit={criarConta} noValidate className="mt-4 space-y-4">
           <div>
             <h1 className="font-serif text-2xl text-tinta">Criar conta</h1>
             <p className="text-sm text-tinta/60">
-              Seus dados ficam no seu dispositivo (modo demonstração).
+              {data.supportsDemo
+                ? "Seus dados ficam no seu dispositivo (modo demonstração)."
+                : "Seus dados ficam protegidos na sua conta."}
             </p>
           </div>
 
-          <Campo label="Nome completo *">
+          <Campo label="Nome completo *" id="nome" erro={errors.nome?.message}>
             <Input
-              value={form.nome}
-              onChange={(e) => set("nome", e.target.value)}
+              id="nome"
               placeholder="Como você se chama"
+              aria-invalid={Boolean(errors.nome)}
+              {...register("nome")}
             />
           </Campo>
-          <Campo label="Celular *">
+          <Campo label="Celular *" id="telefone" erro={errors.telefone?.message}>
             <Input
-              value={form.telefone}
-              onChange={(e) => set("telefone", e.target.value)}
-              placeholder="(71) 9 9999-9999"
+              id="telefone"
+              placeholder="(71) 99999-9999"
               inputMode="tel"
+              aria-invalid={Boolean(errors.telefone)}
+              {...register("telefone")}
+              onChange={(e) =>
+                setValue("telefone", maskTelefone(e.target.value), {
+                  shouldValidate: Boolean(errors.telefone),
+                })
+              }
             />
           </Campo>
-          <Campo label="Endereço *">
+          <Campo label="Endereço *" id="endereco" erro={errors.endereco?.message}>
             <Input
-              value={form.endereco}
-              onChange={(e) => set("endereco", e.target.value)}
+              id="endereco"
               placeholder="Rua, número"
+              aria-invalid={Boolean(errors.endereco)}
+              {...register("endereco")}
             />
           </Campo>
           <div className="grid grid-cols-2 gap-3">
-            <Campo label="CEP *">
+            <Campo label="CEP *" id="cep" erro={errors.cep?.message}>
               <Input
-                value={form.cep}
-                onChange={(e) => set("cep", e.target.value)}
+                id="cep"
                 placeholder="40140-000"
                 inputMode="numeric"
+                aria-invalid={Boolean(errors.cep)}
+                {...register("cep")}
+                onChange={(e) =>
+                  setValue("cep", maskCep(e.target.value), {
+                    shouldValidate: Boolean(errors.cep),
+                  })
+                }
               />
             </Campo>
-            <Campo label="Condomínio">
+            <Campo
+              label="Condomínio"
+              id="condominio"
+              erro={errors.condominio?.message}
+            >
               <Input
-                value={form.condominio}
-                onChange={(e) => set("condominio", e.target.value)}
+                id="condominio"
                 placeholder="Edifício / casa"
+                aria-invalid={Boolean(errors.condominio)}
+                {...register("condominio")}
               />
             </Campo>
           </div>
 
-          <Button type="submit" className="w-full" size="lg" disabled={!camposOk}>
-            Continuar
+          <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Criando…
+              </>
+            ) : (
+              "Continuar"
+            )}
           </Button>
         </form>
       ) : (
@@ -139,8 +163,8 @@ export default function CadastroPage() {
               Verificação em 2 passos
             </h1>
             <p className="mt-1 text-sm text-tinta/60">
-              Enviamos um código para {form.telefone || "seu celular"}. No modo
-              demonstração, é só confirmar.
+              Enviamos um código para {getValues("telefone") || "seu celular"}.
+              No modo demonstração, é só confirmar.
             </p>
           </div>
           <Button
@@ -165,15 +189,24 @@ export default function CadastroPage() {
 
 function Campo({
   label,
+  id,
+  erro,
   children,
 }: {
   label: string;
+  id: string;
+  erro?: string;
   children: React.ReactNode;
 }) {
   return (
     <div>
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       {children}
+      {erro && (
+        <p role="alert" className="mt-1 text-xs text-terracota">
+          {erro}
+        </p>
+      )}
     </div>
   );
 }

@@ -124,5 +124,84 @@ create policy "contest_insert_auth" on public.contestacoes for insert with check
 -- Realtime para notificações (RF-05)
 alter publication supabase_realtime add table public.notificacoes;
 
--- NOTA: as contas demo (botão "Entrar como demo") devem ser criadas pelo app via signUp,
--- pois dependem de auth.users. Crie 2 usuários demo e um vínculo ativo entre eles no 1º load.
+-- ---------- INTEGRIDADE EXTRA ----------
+-- Uma avaliação por (encomenda, avaliador)
+do $$ begin
+  alter table public.avaliacoes
+    add constraint avaliacoes_encomenda_de_unique unique (encomenda_id, de_id);
+exception when duplicate_table then null; when duplicate_object then null; end $$;
+
+-- ---------- REPUTAÇÃO (BR-09) ----------
+-- Recalcula a média do avaliado a cada avaliação; abaixo de 2.5 bloqueia.
+-- Roda como trigger (security definer) porque RLS impede o cliente de
+-- atualizar o perfil de outro usuário.
+create or replace function public.recalc_reputacao()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  media numeric;
+begin
+  select round(avg(nota)::numeric, 1) into media
+    from public.avaliacoes where para_id = new.para_id;
+  update public.profiles
+     set reputacao = coalesce(media, 5),
+         bloqueado = bloqueado or coalesce(media, 5) < 2.5
+   where id = new.para_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_recalc_reputacao on public.avaliacoes;
+create trigger trg_recalc_reputacao
+  after insert on public.avaliacoes
+  for each row execute function public.recalc_reputacao();
+
+-- ---------- ANTI-ABUSO (rate limit por hora) ----------
+create or replace function public.check_limite_convites()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (select count(*) from public.vinculos
+       where morador_id = new.morador_id
+         and created_at > now() - interval '1 hour') >= 10 then
+    raise exception 'Limite de 10 convites por hora atingido.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_limite_convites on public.vinculos;
+create trigger trg_limite_convites
+  before insert on public.vinculos
+  for each row execute function public.check_limite_convites();
+
+create or replace function public.check_limite_registros()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (select count(*) from public.encomendas
+       where recebedor_id = new.recebedor_id
+         and created_at > now() - interval '1 hour') >= 20 then
+    raise exception 'Limite de 20 registros por hora atingido.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_limite_registros on public.encomendas;
+create trigger trg_limite_registros
+  before insert on public.encomendas
+  for each row execute function public.check_limite_registros();
+
+-- NOTA: as contas demo (botão "Entrar como demo") existem só no driver local.
+-- No modo Supabase o app usa sign-in anônimo no cadastro — habilite
+-- Authentication → Providers → Anonymous sign-in no painel.
