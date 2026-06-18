@@ -1,15 +1,25 @@
-// Compressão de foto no cliente — uma foto de 4MB vira ~200KB antes de
-// persistir (localStorage ou bucket). Reduz para no máx. 1280px e JPEG 0.72.
+// Compressão de foto no cliente — uma foto de 4MB vira ~50KB antes de
+// persistir (localStorage ou bucket). Reduz para no máx. 1024px e JPEG 0.6.
+// O alvo pequeno é proposital: no modo demo a foto vai pro localStorage
+// (cota ~5MB no mobile), então cada registro precisa ocupar pouco espaço.
 "use client";
 
-const MAX_DIM = 1280;
-const QUALIDADE = 0.72;
+const MAX_DIM = 1024;
+const QUALIDADE = 0.6;
 
 export async function comprimirFoto(file: File): Promise<Blob> {
-  // Fotos já pequenas passam direto (evita recomprimir ícones/prints leves).
-  if (file.size <= 200 * 1024) return file;
+  // Fotos já bem pequenas passam direto (evita recomprimir ícones/prints leves).
+  if (file.size <= 80 * 1024) return file;
 
-  const bitmap = await createImageBitmap(file);
+  // Formatos que o navegador não decodifica (ex.: HEIC do iPhone) fazem
+  // createImageBitmap rejeitar — nesse caso seguimos com o arquivo original
+  // em vez de bloquear o registro (a foto não pode impedir o cadastro).
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    return file;
+  }
   const escala = Math.min(1, MAX_DIM / Math.max(bitmap.width, bitmap.height));
   const w = Math.round(bitmap.width * escala);
   const h = Math.round(bitmap.height * escala);

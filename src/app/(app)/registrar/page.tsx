@@ -18,6 +18,7 @@ export default function RegistrarPage() {
   const { toast } = useToast();
   const { user } = useCurrentUser();
   const fileRef = useRef<HTMLInputElement>(null);
+  const fotoRef = useRef<HTMLDivElement>(null);
 
   const { data: destinatarios = [], ready } = useData(
     () =>
@@ -52,6 +53,10 @@ export default function RegistrarPage() {
 
   async function salvar() {
     if (!user) return;
+    if (carregandoFoto) {
+      toast("Aguarde a foto terminar de carregar.", "erro");
+      return;
+    }
     const parsed = registrarSchema.safeParse({ destinatarioId, fotoUrl, descricao });
     if (!parsed.success) {
       const porCampo: Record<string, string> = {};
@@ -59,6 +64,13 @@ export default function RegistrarPage() {
         porCampo[String(i.path[0])] = i.message;
       });
       setErros(porCampo);
+      // feedback claro: a foto é o bloqueio mais comum (BR-03)
+      if (!fotoUrl) {
+        toast("Tire a foto da encomenda — ela é obrigatória.", "erro");
+        fotoRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else if (!destinatarioId) {
+        toast("Escolha para quem é a encomenda.", "erro");
+      }
       return;
     }
     setSalvando(true);
@@ -91,8 +103,9 @@ export default function RegistrarPage() {
     );
   }
 
-  const podeSalvar =
-    Boolean(fotoUrl && destinatarioId) && !salvando && !carregandoFoto;
+  // O botão fica clicável mesmo sem foto/destinatário (e durante o
+  // processamento da foto): ao clicar, mostra o que falta em vez de só ficar
+  // cinza sem explicação. Só desabilita enquanto está realmente salvando.
 
   return (
     <div className="space-y-5">
@@ -104,7 +117,7 @@ export default function RegistrarPage() {
       </div>
 
       {/* Foto obrigatória */}
-      <div>
+      <div ref={fotoRef}>
         <Label>Foto da encomenda *</Label>
         <input
           ref={fileRef}
@@ -137,7 +150,9 @@ export default function RegistrarPage() {
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={carregandoFoto}
-            className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed border-linha bg-white text-tinta/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracota/60"
+            className={`flex h-40 w-full flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed bg-white text-tinta/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracota/60 ${
+              erros.fotoUrl ? "border-terracota" : "border-linha"
+            }`}
           >
             {carregandoFoto ? (
               <Loader2 className="h-8 w-8 animate-spin text-terracota" />
@@ -205,7 +220,7 @@ export default function RegistrarPage() {
       <Button
         className="w-full"
         size="lg"
-        disabled={!podeSalvar}
+        disabled={salvando}
         onClick={salvar}
       >
         {salvando ? (
@@ -218,7 +233,7 @@ export default function RegistrarPage() {
       </Button>
       {!fotoUrl && (
         <p className="text-center text-xs text-tinta/50">
-          Sem foto, não dá pra registrar.
+          A foto é obrigatória — toque em “Tirar / escolher foto” acima.
         </p>
       )}
     </div>

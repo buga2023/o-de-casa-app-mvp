@@ -4,6 +4,7 @@
 
 import type { DBShape } from "./types";
 import { seedDB } from "./seed";
+import { RegraError } from "./errors";
 
 const KEY = "odecasa.db.v1";
 const SESSION_KEY = "odecasa.session.v1";
@@ -34,7 +35,22 @@ export function loadDB(): DBShape {
 
 export function saveDB(db: DBShape) {
   if (!isBrowser()) return;
-  window.localStorage.setItem(KEY, JSON.stringify(db));
+  try {
+    window.localStorage.setItem(KEY, JSON.stringify(db));
+  } catch (e) {
+    // localStorage cheio (cota ~5MB, menor no mobile): o registro não persiste.
+    // Erro claro e acionável em vez de falhar em silêncio.
+    if (
+      e instanceof DOMException &&
+      (e.name === "QuotaExceededError" ||
+        e.name === "NS_ERROR_DOM_QUOTA_REACHED")
+    ) {
+      throw new RegraError(
+        "Armazenamento do navegador cheio. Vá em Perfil → Reiniciar dados demo para liberar espaço."
+      );
+    }
+    throw e;
+  }
   // notifica assinantes (realtime simulado) — síncrono + cross-tab via storage event
   listeners.forEach((l) => l());
 }

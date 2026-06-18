@@ -43,9 +43,12 @@ test("modo demo entra e mostra a home do app", async ({ page }) => {
 test("registrar encomenda exige foto (BR-03)", async ({ page }) => {
   await entrarComoDemoLimpo(page);
   await page.getByRole("link", { name: "Registrar" }).click();
-  // sem foto, o botão de salvar deve estar desabilitado
-  const salvar = page.getByRole("button", { name: /registrar encomenda/i });
-  await expect(salvar).toBeDisabled();
+  // escolhe destinatário, mas NÃO adiciona foto
+  await page.getByText("Bruno Lima").click();
+  // o botão é clicável e, sem foto, avisa de forma clara e não avança (BR-03)
+  await page.getByRole("button", { name: /registrar encomenda/i }).click();
+  await expect(page.getByText(/foto é obrigatória/i).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: /comprovante/i })).toHaveCount(0);
 });
 
 test("caminho-feliz: registrar com foto -> notificar -> comprovante -> dar baixa", async ({
